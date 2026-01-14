@@ -136,7 +136,11 @@
   </main>
 
   <script>
-    const sampleInventory = [
+    // Apps Script endpoint (provided). Remove trailing semicolon if present.
+    const API_URL = "https://script.google.com/macros/s/AKfycbzd1_RuR2SkoIClSCtr5rF4M7xZGGWEGyssKxULAnceHlx5McREPzKbTogzLakeViG4/exec";
+
+    // Local sample fallback
+    let fetch = [
       { id: 1, make: 'Toyota', model: 'Corolla', year: 2020, price: 15900, stock: true, img: '' },
       { id: 2, make: 'Honda', model: 'Civic', year: 2019, price: 14950, stock: true, img: '' },
       { id: 3, make: 'Ford', model: 'F-150', year: 2021, price: 28900, stock: false, img: '' },
@@ -153,9 +157,17 @@
       return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
     }
 
+    function showLoading() {
+      inventoryEl.innerHTML = '<div style="padding:20px;background:#fff;border-radius:8px">Loading inventory...</div>';
+    }
+
+    function showError(msg) {
+      inventoryEl.innerHTML = `<div style="padding:20px;background:#fff;border-radius:8px;color:#900">${msg}</div>`;
+    }
+
     function render(items) {
       inventoryEl.innerHTML = '';
-      if (!items.length) {
+      if (!items || !items.length) {
         inventoryEl.innerHTML = '<div style="padding:20px;background:#fff;border-radius:8px">No vehicles found.</div>';
         return;
       }
@@ -220,7 +232,7 @@
       const stock = filterStockEl.value;
       const sort = sortByEl.value;
 
-      let items = sampleInventory.filter(v => {
+      let items = (window.__inventoryData || sampleInventory).filter(v => {
         if (stock === 'in' && !v.stock) return false;
         if (stock === 'out' && v.stock) return false;
         if (!q) return true;
@@ -238,8 +250,27 @@
     filterStockEl.addEventListener('change', () => applyFilters());
     sortByEl.addEventListener('change', () => applyFilters());
 
-    // initial render
-    render(sampleInventory);
+    async function loadInventory() {
+      showLoading();
+      try {
+        const res = await fetch(API_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Network response not ok');
+        const data = await res.json();
+        // Expecting an array; adjust if your GAS returns { items: [...] }
+        const items = Array.isArray(data) ? data : (data.items || []);
+        if (!items.length) throw new Error('No items returned');
+        window.__inventoryData = items;
+        render(items);
+      } catch (err) {
+        console.warn('Failed to load remote inventory, using sample:', err);
+        showError('Failed to load remote inventory — showing local sample.');
+        window.__inventoryData = sampleInventory;
+        render(sampleInventory);
+      }
+    }
+
+    // initial load from API (falls back to sample)
+    loadInventory();
   </script>
 </body>
 </html>
