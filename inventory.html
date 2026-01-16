@@ -103,6 +103,16 @@
       display: inline-block;
     }
 
+    .badge.in {
+      background: #e6fff2;
+      color: #0a6;
+    }
+
+    .badge.out {
+      background: #ffecec;
+      color: #900;
+    }
+
     @media (max-width: 520px) {
       body { padding: 18px; }
       .controls { flex-direction: column; align-items: stretch; }
@@ -135,24 +145,32 @@
     </section>
   </main>
 
-  <script>
-    // Apps Script endpoint (provided). Remove trailing semicolon if present.
-    const API_URL = "https://script.google.com/macros/s/AKfycbzd1_RuR2SkoIClSCtr5rF4M7xZGGWEGyssKxULAnceHlx5McREPzKbTogzLakeViG4/exec";
+ <script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbzd1_RuR2SkoIClSCtr5rF4M7xZGGWEGyssKxULAnceHlx5McREPzKbTogzLakeViG4/exec";
 
-    // Local sample fallback
-    let fetch = [
-      { id: 1, make: 'Toyota', model: 'Corolla', year: 2020, price: 15900, stock: true, img: '' },
-      { id: 2, make: 'Honda', model: 'Civic', year: 2019, price: 14950, stock: true, img: '' },
-      { id: 3, make: 'Ford', model: 'F-150', year: 2021, price: 28900, stock: false, img: '' },
-      { id: 4, make: 'BMW', model: 'X3', year: 2018, price: 21900, stock: true, img: '' },
-      { id: 5, make: 'Tesla', model: 'Model 3', year: 2022, price: 35900, stock: false, img: '' }
-    ];
+  const sampleInventory = [
 
-    const inventoryEl = document.getElementById('inventory');
-    const searchEl = document.getElementById('search');
-    const filterStockEl = document.getElementById('filterStock');
-    const sortByEl = document.getElementById('sortBy');
+    {
+      id: "gtr35",
+      make: "Nissan",
+      model: "GT-R NISMO FINAL",
+      year: 2024,
+      price: 1850000,
+      stock: true,
+      img: "gtr.jpg"
+    }
+  ];
+const inventoryEl = document.getElementById('inventory');
+const searchEl = document.getElementById('search');
+const filterStockEl = document.getElementById('filterStock');
+const sortByEl = document.getElementById('sortBy');
 
+if (!inventoryEl) {
+  console.error('`#inventory` element not found — rendering disabled.');
+}
+if (!searchEl || !filterStockEl || !sortByEl) {
+  console.warn('One or more control elements (`#search`, `#filterStock`, `#sortBy`) are missing — search/filter/sort will be partially disabled.');
+}
     function formatPrice(n) {
       return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
     }
@@ -210,8 +228,12 @@
         price.textContent = formatPrice(v.price);
 
         const badge = document.createElement('div');
-        badge.className = 'badge';
-        badge.textContent = v.stock ? 'In stock' : 'Sold / Hold';
+        badge.className = 'badge ' + (v.stock ? 'in' : 'out');
+        badge.textContent = v.stock ? 'In stock' : 'Out of stock';
+
+        if (!v.stock) {
+          card.style.opacity = '0.6';
+        }
 
         bottom.appendChild(price);
         bottom.appendChild(badge);
@@ -228,9 +250,9 @@
     }
 
     function applyFilters() {
-      const q = searchEl.value.trim().toLowerCase();
-      const stock = filterStockEl.value;
-      const sort = sortByEl.value;
+      const q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+      const stock = filterStockEl ? filterStockEl.value : 'all';
+      const sort = sortByEl ? sortByEl.value : 'newest';
 
       let items = (window.__inventoryData || sampleInventory).filter(v => {
         if (stock === 'in' && !v.stock) return false;
@@ -246,9 +268,9 @@
       render(items);
     }
 
-    searchEl.addEventListener('input', () => applyFilters());
-    filterStockEl.addEventListener('change', () => applyFilters());
-    sortByEl.addEventListener('change', () => applyFilters());
+    if (searchEl) searchEl.addEventListener('input', () => applyFilters());
+    if (filterStockEl) filterStockEl.addEventListener('change', () => applyFilters());
+    if (sortByEl) sortByEl.addEventListener('change', () => applyFilters());
 
     async function loadInventory() {
       showLoading();
