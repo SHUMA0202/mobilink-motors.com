@@ -8,7 +8,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f7f7f7;
+      background: #f4f4f4;
       padding: 40px;
       margin: 0;
       color: #222;
@@ -51,27 +51,32 @@
     }
 
     #inventory .card {
-      background: #ffffff;
-      padding: 16px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.08);
+      overflow: hidden;
       display: flex;
-      gap: 12px;
-      align-items: center;
+      flex-direction: column;
+      padding: 0;
     }
 
     #inventory .thumb {
-      width: 120px;
-      height: 80px;
-      background: linear-gradient(135deg,#eee,#ddd);
-      border-radius: 6px;
-      flex-shrink: 0;
+      width: 100%;
+      height: 180px;
+      background: #eee;
+      border-radius: 8px 8px 0 0;
       display: flex;
       align-items: center;
       justify-content: center;
       color: #777;
       font-size: 12px;
       overflow: hidden;
+    }
+
+    #inventory .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     #inventory .meta {
@@ -92,6 +97,8 @@
     .meta .price {
       font-weight: 700;
       color: #0a6;
+      font-size: 18px;
+      letter-spacing: 0.03em;
     }
 
     .badge {
@@ -126,6 +133,11 @@
     <h1>Inventory</h1>
     <div class="controls">
       <input id="search" type="search" placeholder="Search by make, model, or year">
+      <select id="filterMake">
+        <option value="">全メーカー</option>
+        <option value="Nissan">Nissan</option>
+        <option value="Toyota">Toyota</option>
+      </select>
       <select id="filterStock">
         <option value="all">All stock</option>
         <option value="in">In stock</option>
@@ -135,6 +147,10 @@
         <option value="newest">Newest</option>
         <option value="priceLow">Price: Low → High</option>
         <option value="priceHigh">Price: High → Low</option>
+      </select>
+      <select id="currency">
+        <option value="eur">EUR</option>
+        <option value="jpy">JPY</option>
       </select>
     </div>
   </header>
@@ -163,7 +179,11 @@
 const inventoryEl = document.getElementById('inventory');
 const searchEl = document.getElementById('search');
 const filterStockEl = document.getElementById('filterStock');
+const filterMakeEl = document.getElementById('filterMake');
 const sortByEl = document.getElementById('sortBy');
+
+const currencyEl = document.getElementById('currency');
+let currentCurrency = 'eur';
 
 if (!inventoryEl) {
   console.error('`#inventory` element not found — rendering disabled.');
@@ -172,7 +192,11 @@ if (!searchEl || !filterStockEl || !sortByEl) {
   console.warn('One or more control elements (`#search`, `#filterStock`, `#sortBy`) are missing — search/filter/sort will be partially disabled.');
 }
     function formatPrice(n) {
-      return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+      if (currentCurrency === 'jpy') {
+        return n ? `¥${Number(n).toLocaleString('ja-JP', { maximumFractionDigits: 0 })}` : '';
+      }
+      // Default EUR
+      return n ? `€${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '';
     }
 
     function showLoading() {
@@ -183,6 +207,7 @@ if (!searchEl || !filterStockEl || !sortByEl) {
       inventoryEl.innerHTML = `<div style="padding:20px;background:#fff;border-radius:8px;color:#900">${msg}</div>`;
     }
 
+    const IS_ADMIN = location.search.includes('admin=1');
     function render(items) {
       inventoryEl.innerHTML = '';
       if (!items || !items.length) {
@@ -216,7 +241,14 @@ if (!searchEl || !filterStockEl || !sortByEl) {
 
         const specs = document.createElement('div');
         specs.className = 'specs';
-        specs.textContent = `Stock: ${v.stock ? 'Available' : 'Unavailable'}`;
+        specs.innerHTML = `
+          年式：${v.year}<br>
+          VIN：${v.vin || '—'}<br>
+          在庫：${v.stock ? 'あり' : 'なし'}
+        `;
+
+        meta.appendChild(title);
+        meta.appendChild(specs);
 
         const bottom = document.createElement('div');
         bottom.style.display = 'flex';
@@ -225,25 +257,59 @@ if (!searchEl || !filterStockEl || !sortByEl) {
 
         const price = document.createElement('div');
         price.className = 'price';
-        price.textContent = formatPrice(v.price);
+        // Show price in selected currency
+        if (currentCurrency === 'jpy' && v.price_jpy) {
+          price.textContent = formatPrice(v.price_jpy);
+        } else {
+          price.textContent = formatPrice(v.price);
+        }
+        price.style.fontSize = '22px';
+        price.style.fontWeight = '800';
 
         const badge = document.createElement('div');
-        badge.className = 'badge ' + (v.stock ? 'in' : 'out');
-        badge.textContent = v.stock ? 'In stock' : 'Out of stock';
-
+        badge.className = 'badge';
         if (!v.stock) {
+          badge.textContent = 'SOLD';
+          badge.classList.add('out');
           card.style.opacity = '0.6';
+        } else {
+          badge.textContent = 'In stock';
+          badge.classList.add('in');
         }
 
         bottom.appendChild(price);
         bottom.appendChild(badge);
 
-        meta.appendChild(title);
-        meta.appendChild(specs);
         meta.appendChild(bottom);
+
+        // Add actions row with お問い合わせ button
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.gap = '8px';
+        actions.style.marginTop = '10px';
+        actions.innerHTML = `
+          <a href="mailto:info@mobilink-motors.com?subject=${encodeURIComponent(v.make + ' ' + v.model)}"
+             style="flex:1;text-align:center;padding:8px;border-radius:6px;background:#e60023;color:#fff;text-decoration:none;">
+             お問い合わせ
+          </a>
+        `;
+
+        // Add Japanese inquiry and LINE link
+        const inquiry = document.createElement('div');
+        inquiry.style.marginTop = '10px';
+        inquiry.style.fontSize = '15px';
+        inquiry.innerHTML = `📩 この車両について問い合わせ<br>
+          <a href="https://lin.ee/xxxx" target="_blank" style="color:#06c;text-decoration:underline;">LINEで問い合わせ</a>`;
+        meta.appendChild(actions);
+        meta.appendChild(inquiry);
 
         card.appendChild(thumb);
         card.appendChild(meta);
+
+        card.style.cursor = 'pointer';
+        card.onclick = () => {
+          location.href = `car.html?id=${v.id}`;
+        };
 
         inventoryEl.appendChild(card);
       }
@@ -252,25 +318,43 @@ if (!searchEl || !filterStockEl || !sortByEl) {
     function applyFilters() {
       const q = searchEl ? searchEl.value.trim().toLowerCase() : '';
       const stock = filterStockEl ? filterStockEl.value : 'all';
+      const make = filterMakeEl ? filterMakeEl.value : '';
       const sort = sortByEl ? sortByEl.value : 'newest';
 
       let items = (window.__inventoryData || sampleInventory).filter(v => {
         if (stock === 'in' && !v.stock) return false;
         if (stock === 'out' && v.stock) return false;
+        if (make && v.make !== make) return false;
         if (!q) return true;
         return (`${v.make} ${v.model} ${v.year}`).toLowerCase().includes(q);
       });
 
-      if (sort === 'priceLow') items.sort((a,b)=>a.price-b.price);
-      else if (sort === 'priceHigh') items.sort((a,b)=>b.price-a.price);
-      else items.sort((a,b)=>b.year-a.year);
+      if (sort === 'priceLow') items.sort((a,b)=>{
+        if (currentCurrency === 'jpy') return (a.price_jpy||0)-(b.price_jpy||0);
+        return (a.price||0)-(b.price||0);
+      });
+      else if (sort === 'priceHigh') items.sort((a,b)=>{
+        if (currentCurrency === 'jpy') return (b.price_jpy||0)-(a.price_jpy||0);
+        return (b.price||0)-(a.price||0);
+      });
+      else if (sort === 'order') {
+        items.sort((a,b)=> (a.order||0)-(b.order||0));
+      } else {
+        // Default: newest, but prioritize in-stock
+        items.sort((a,b)=>b.stock-a.stock || b.year-a.year);
+      }
 
       render(items);
     }
 
     if (searchEl) searchEl.addEventListener('input', () => applyFilters());
     if (filterStockEl) filterStockEl.addEventListener('change', () => applyFilters());
+    if (filterMakeEl) filterMakeEl.addEventListener('change', () => applyFilters());
     if (sortByEl) sortByEl.addEventListener('change', () => applyFilters());
+    if (currencyEl) currencyEl.addEventListener('change', e => {
+      currentCurrency = e.target.value;
+      applyFilters();
+    });
 
     async function loadInventory() {
       showLoading();
@@ -279,7 +363,18 @@ if (!searchEl || !filterStockEl || !sortByEl) {
         if (!res.ok) throw new Error('Network response not ok');
         const data = await res.json();
         // Expecting an array; adjust if your GAS returns { items: [...] }
-        const items = Array.isArray(data) ? data : (data.items || []);
+        let items = Array.isArray(data) ? data : (data.items || []);
+        // Map API fields to frontend format
+        items = items.map(v => ({
+          id: v.id,
+          make: 'Nissan',
+          model: v.name,
+          year: 2024,
+          price: v.price_eur,
+          price_jpy: v.price_jpy,
+          stock: v.status === 'available',
+          img: v.image
+        }));
         if (!items.length) throw new Error('No items returned');
         window.__inventoryData = items;
         render(items);
